@@ -59,7 +59,8 @@ class PromptSampler():
 
 class Prompter():
     cache = dict()
-    ref = {'videojunk': DATA_PATH/'videojunk_tags.csv',
+    ref = { 'aweadj': DATA_PATH/'awe_adj.csv',
+            'videojunk': DATA_PATH/'videojunk_tags.csv',
             'serene': DATA_PATH/'serene_settings.csv'
             }
 

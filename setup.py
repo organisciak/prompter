@@ -3,7 +3,7 @@
 from distutils.core import setup
 
 setup(name='Prompter',
-      version='0.0.1',
+      version='0.0.2',
       description='Text-to-Speech Prompt Helper',
       author='Peter Organisciak',
       author_email='organisciak@gmail.com',
