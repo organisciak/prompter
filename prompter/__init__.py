@@ -5,6 +5,8 @@ from pathlib import Path
 import pkg_resources
 import ipywidgets as widgets
 from IPython.display import display
+import os
+
 DATA_PATH = Path(pkg_resources.resource_filename(__name__, 'data'))
 
 rng = default_rng()
@@ -153,7 +155,7 @@ class ImageOutHandler():
         ask: Buttons for on-demand commands. If save=False, offer a save button. If save=True, offer a delete button.
         '''
         # some models don't return the safety checks.
-        if not unsafe_detected:
+        if unsafe_detected is None:
             unsafe_detected = [False] * len(images)
         
         if type(prompts) == str:
