@@ -14,6 +14,9 @@ rng = default_rng()
 class PromptSampler():
     def __init__(self, terms, weights=None, name=None):
         self.terms = terms
+        if (type(self.terms) is str):
+            # assume comma separated
+            self.terms = [x.strip() for x in self.terms.split(',')]
         if (type(self.terms) is np.ndarray):
             self.terms = self.terms.tolist()
         self.weights = None
@@ -58,7 +61,7 @@ class PromptSampler():
             x = rng.choice(list(zip(self.terms, self.weights)), n, replace=False, p=p)
             return PromptSampler(x[:,0].tolist(), x[:,1])
         else:
-            choices = rng.choice(self.terms, size=n, replace=False)
+            choices = rng.choice(self.terms, size=min(n, len(self)), replace=False)
             return PromptSampler(choices.tolist())
 
 class Prompter():
@@ -84,6 +87,25 @@ class Prompter():
     def add_csv(self, name, path):
         self.ref[name] = path
         return self[name]
+
+    def parse_interrogations(self, fpath, name=None):
+        ''' Parse an output data_desc.csv-style file from CLIP interrogator and return two PromptSampler: one
+        for the BLIP settings, and one for the CLIP styles.'''
+        blips = []
+        clips = []
+
+        if not name:
+            name = fpath.parent.name
+
+        for prompt in pd.read_csv(fpath).prompt:
+            blip, clip = prompt.strip().split(', ', 1)
+            blips.append(blip)
+            clips += [c.strip() for c in clip.split(',')]
+
+        self.cache[f"{name}_scenes"] = PromptSampler(blips)
+        self.cache[f"{name}_styles"] = PromptSampler(clips)
+        
+        return self.cache[f"{name}_scenes"], self.cache[f"{name}_styles"]
 
     def add_terms(self, name, terms, weights=None):
         ps = PromptSampler(terms, weights)
