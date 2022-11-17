@@ -155,8 +155,16 @@ class Prompter():
         return self.cache[f"{name}_scenes"], self.cache[f"{name}_styles"]
 
     def add_terms(self, name, terms, weights=None):
+        ''' Initialize a prompt sampler and add to cache.'''
         ps = PromptSampler(terms, weights)
         self.cache[name] = ps
+        return self[name]
+
+    def add(self, promptsampler, name=None):
+        ''' Add already initialized PromptSampler '''
+        if name is None:
+            assert promptsampler.name is not None, "Need a name either in PromptSampler instance or supplied by arg"
+        self.cache[name] = promptsampler
         return self[name]
 
     def _load_dataset(self, path):
