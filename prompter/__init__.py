@@ -6,6 +6,7 @@ import pkg_resources
 import ipywidgets as widgets
 from IPython.display import display
 import os
+import json
 
 DATA_PATH = Path(pkg_resources.resource_filename(__name__, 'data'))
 
@@ -13,26 +14,72 @@ rng = default_rng()
 
 class PromptSampler():
     def __init__(self, terms, weights=None, name=None):
+        '''
+        Terms - the terms to use. If a list, used directly. 
+                If a string, will split on commas andstrip whitespace.
+                If a dict, expects {'terms':[], 'weights':[], 'name':''}, where only terms is required.
+                If a path, assumes json
+        '''
         self.terms = terms
         if (type(self.terms) is str):
             # assume comma separated
             self.terms = [x.strip() for x in self.terms.split(',')]
-        if (type(self.terms) is np.ndarray):
+        elif (type(self.terms) is np.ndarray):
             self.terms = self.terms.tolist()
+        elif isinstance(self.terms, Path) and self.terms.name.endswith('.json'):
+            with open(self.terms) as f:
+                self.terms = json.load(terms)
+
         self.weights = None
-        if weights is not None:
+        if self.weights is not None:
             self.weights = np.array(weights)
         self.name = name
+
+        if type(self.terms) is dict:
+            self.terms, w, n = self._from_dict(self.terms)
+            # don't overwrite manually provided weights and names
+            if self.weights is None:
+                self.weights = w
+            if self.name is None:
+                self.name = n
 
     def __len__(self):
         return len(self.terms)
 
-    def __str__(self):
-        return ", ".join(self.terms)
+    def __str__(self, sep=', '):
+        return sep.join(self.terms)
 
-    def str(self):
+    def str(self, sep=', '):
         ''' For convenient casting if needed. '''
         return self.__str__()
+
+    def to_dict(self):
+        return dict(terms=self.terms, weights=self.weights, name=self.name)
+
+    def to_json(self, fname=None, mode='w'):
+        if fname is None:
+            return json.dumps(self.to_dict())
+        else:
+            with open(fname, mode=mode) as f:
+                json.dump(self.to_dict(), fname)
+
+    def _from_dict(self, indict):
+        terms = dict.get('terms', [])
+        assert len(terms), "Dict didn't have any terms in it"
+        weights = dict.get('weights', None)
+        name = dict.get('name', None)
+        return terms, weights, name
+
+    def _from_json(self, injson):
+        if '{' not in injson.strip():
+            # assume a filepath
+            with open(injson) as f:
+                data = json.load(f)
+        else:
+            data = json.loads(injson)
+        terms, weights, name = self._from_dict(data)
+        return terms, weights, name
+
 
     def __repr__(self):
         return self.__str__()
