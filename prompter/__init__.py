@@ -119,13 +119,21 @@ class Prompter():
             'serene': DATA_PATH/'serene_settings.csv'
             }
 
-    def __init__(self):
-        pass
+    def __init__(self, templates=[]):
+        '''
+        templates: optional list of templates, or list of dicts with a 'template' key
+        '''
+        if len(templates) and type(templates[0]) is not dict:
+            templates = [{'template':template for template in templates}]
+        self.templates = templates
 
     def __getitem__(self, key):
         try:
-            if key in self.ref.keys():
-                return self._load_dataset(self.ref[key])
+            if key in self.cache.keys():
+                return self.cache[key]
+            elif key in self.ref.keys():
+                path = self.ref[key]
+                return self._load_dataset(path, name=key)
             else:
                 # try to load as a path, or a custom cache key if added
                 return self._load_dataset(key)
@@ -136,9 +144,11 @@ class Prompter():
         self.ref[name] = path
         return self[name]
 
-    def template(self, template, fill=[]):
+    def template(self, template=0, fill=[]):
         '''
         Construct from a template, where portions to replace are marked with double curly braces.
+
+        template: A template string, or an integer referring to a cached template.
 
         Refer to saved PromptSamplers by name in the curly braces - optionally with square brackets to
         refer to number to sample. If curly braces are empty, what to put in is pulled from the list
@@ -150,7 +160,9 @@ class Prompter():
             will fill 'A poster of' followed by one term from the 'serene' prompt list and
             all videojunk terms.
         '''
-        
+        if type(template) is int:
+            template = self.templates[0]['template']
+
         # make into a formal template
         template_str = re.sub(r"{{.*?}}", r"{}", template)
         substrings = re.findall(r"{{(.*?)}}", template)
@@ -209,13 +221,21 @@ class Prompter():
         self.cache[name] = promptsampler
         return self[name]
 
-    def _load_dataset(self, path):
-        if str(path) not in self.cache:
+    def _load_dataset(self, path, name=None):
+        if name is None:
+            name = Path(path).stem
+        
+        if str(path) not in self.ref.values():
             df = pd.read_csv(path)
             weights = df.weight if 'weight' in df.columns else None
             ps = PromptSampler(df.prompt.tolist(), weights)
-            self.cache[str(path)] = ps
-        return self.cache[str(path)]
+            
+            self.cache[name] = ps
+            self.ref[name] = str(path)
+        return self.cache[name]
+
+    def to_dict(self, path):
+        pass
 
 class ImageOutHandler():
 
