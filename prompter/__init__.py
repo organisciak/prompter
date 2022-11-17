@@ -114,6 +114,7 @@ class PromptSampler():
 
 class Prompter():
     
+    cache = {}
     ref = { 'aweadj': DATA_PATH/'awe_adj.csv',
             'videojunk': DATA_PATH/'videojunk_tags.csv',
             'serene': DATA_PATH/'serene_settings.csv'
@@ -126,7 +127,6 @@ class Prompter():
         if len(templates) and type(templates[0]) is not dict:
             templates = [{'template':template for template in templates}]
     
-        self.cache = dict()
         self.templates = templates
         self.name = None
         self.description = None
@@ -164,28 +164,45 @@ class Prompter():
             template = self.templates[0]['template']
 
         # make into a formal template
-        template_str = re.sub(r"{{.*?}}", r"{}", template)
-        substrings = re.findall(r"{{(.*?)}}", template)
+        template_str, sampler_args = self._parse_template(template)
 
         fill_ind = 0
         if type(fill) is str:
             fill = [fill]
 
         fargs = []
-        for substr in substrings:
-            substr = substr.strip()
-            if substr == '':
+        for name, count in sampler_args:
+            if name == '':
                 fargs.append(fill[fill_ind])
                 fill_ind += 1
+            elif count is None:
+                fargs.append(self[name])
+            else:
+                fargs.append(self[name][count])
+
+        return template_str.format(*fargs)
+
+    def _parse_template(self, template):
+        # make into a formal template
+        template_str = re.sub(r"{{.*?}}", r"{}", template)
+        samplerstrings = re.findall(r"{{(.*?)}}", template)
+
+        sampler_args = []
+        for substr in samplerstrings:
+            substr = substr.strip()
+            if substr == '':
+                sampler_args.append((None, None))
             else:
                 name, count = re.search(r"^(.*?)\[?(\d*)\]?$", substr).groups()
                 if count != '':
                     count = int(count)
-                    fargs.append(self[name][count])
                 else:
-                    fargs.append(self[name])
+                    count = None
+                sampler_args.append((name, count))
 
-        return template_str.format(*fargs)
+        return template_str, sampler_args
+
+        
 
     def parse_interrogations(self, fpath, name=None):
         ''' Parse an output data_desc.csv-style file from CLIP interrogator and return two PromptSampler: one
@@ -208,13 +225,13 @@ class Prompter():
 
     ## Growing PS list ##
     def add_terms(self, name, terms, weights=None):
-        ''' Initialize a prompt sampler and add to instance cache.'''
+        ''' Initialize a prompt sampler and add to class cache.'''
         ps = PromptSampler(terms, weights)
         self.cache[name] = ps
         return self[name]
 
     def add(self, promptsampler, name=None):
-        ''' Add already initialized PromptSampler to instance cache. '''
+        ''' Add already initialized PromptSampler to class cache. '''
         if name is None:
             assert promptsampler.name is not None, "Need a name either in PromptSampler instance or supplied by arg"
             name = promptsampler.name
@@ -237,6 +254,7 @@ class Prompter():
             
             self.cache[name] = ps
             self.ref[name] = str(path)
+        
         return self.cache[name]
 
     def to_dict(self, name=None, description=None, cache_keys=None):
