@@ -65,10 +65,10 @@ class PromptSampler():
                 json.dump(self.to_dict(), fname)
 
     def _from_dict(self, indict):
-        terms = dict.get('terms', [])
+        terms = indict.get('terms', [])
         assert len(terms), "Dict didn't have any terms in it"
-        weights = dict.get('weights', None)
-        name = dict.get('name', None)
+        weights = indict.get('weights', None)
+        name = indict.get('name', None)
         return terms, weights, name
 
     def _from_json(self, injson):
@@ -113,19 +113,23 @@ class PromptSampler():
             return PromptSampler(choices.tolist())
 
 class Prompter():
-    cache = dict()
+    
     ref = { 'aweadj': DATA_PATH/'awe_adj.csv',
             'videojunk': DATA_PATH/'videojunk_tags.csv',
             'serene': DATA_PATH/'serene_settings.csv'
             }
 
-    def __init__(self, templates=[]):
+    def __init__(self, name=None, description=None, templates=[]):
         '''
         templates: optional list of templates, or list of dicts with a 'template' key
         '''
         if len(templates) and type(templates[0]) is not dict:
             templates = [{'template':template for template in templates}]
+    
+        self.cache = dict()
         self.templates = templates
+        self.name = None
+        self.description = None
 
     def __getitem__(self, key):
         try:
@@ -139,11 +143,7 @@ class Prompter():
                 return self._load_dataset(key)
         except KeyError:
             raise KeyError(f"'{key}' not seen in class reference, filesystem, or cache")
-
-    def add_csv(self, name, path):
-        self.ref[name] = path
-        return self[name]
-
+        
     def template(self, template=0, fill=[]):
         '''
         Construct from a template, where portions to replace are marked with double curly braces.
@@ -206,21 +206,26 @@ class Prompter():
         
         return self.cache[f"{name}_scenes"], self.cache[f"{name}_styles"]
 
-    def add_terms(self, name, terms, weights=None, instance_cache=False):
-        ''' Initialize a prompt sampler and add to class cache.'''
-        assert instance_cache is None, "Writing to instance cache is currently not supported"
+    ## Growing PS list ##
+    def add_terms(self, name, terms, weights=None):
+        ''' Initialize a prompt sampler and add to instance cache.'''
         ps = PromptSampler(terms, weights)
         self.cache[name] = ps
         return self[name]
 
-    def add(self, promptsampler, name=None, instance_cache=False):
-        ''' Add already initialized PromptSampler to class cache. '''
-        assert instance_cache is None, "Writing to instance cache is currently not supported"
+    def add(self, promptsampler, name=None):
+        ''' Add already initialized PromptSampler to instance cache. '''
         if name is None:
             assert promptsampler.name is not None, "Need a name either in PromptSampler instance or supplied by arg"
+            name = promptsampler.name
         self.cache[name] = promptsampler
         return self[name]
 
+    def add_csv(self, name, path):
+        self.ref[name] = path
+        return self[name]
+
+    ## I/O ##
     def _load_dataset(self, path, name=None):
         if name is None:
             name = Path(path).stem
@@ -234,8 +239,45 @@ class Prompter():
             self.ref[name] = str(path)
         return self.cache[name]
 
-    def to_dict(self, path):
-        pass
+    def to_dict(self, name=None, description=None, cache_keys=None):
+        '''Serialize cache to dictionary. If cache_keys provided, only save certain keys'''
+        if cache_keys is None:
+            cache_keys = self.cache.keys()
+        serial = dict(
+            name=name,
+            description=description,
+            templates=self.templates,
+            args={name: ps.to_dict() for name, ps in self.cache.items() if name in cache_keys}
+        )
+        return serial
+
+    def to_json(self, fname=None, name=None, description=None, cache_keys=None, mode='w'):
+        if name is None:
+            name = self.name
+        if description is None:
+            description = self.description
+        outdict = self.to_dict(name, description, cache_keys)
+        if fname is None:
+            return json.dumps(outdict)
+        else:
+            with open(fname, mode=mode) as f:
+                json.dump(outdict, f)
+
+    def read_json(self, fname):
+        with open(fname, mode='r') as f:
+            indict = json.load(f)
+        self.from_dict(indict)
+
+    def from_dict(self, indict):
+        if self.name is None:
+            self.name = indict.get('name', None)
+        if self.description is None:
+            self.description = indict.get('description', None)
+        
+        self.templates += indict.get('templates', [])
+        for name, psdict in indict.get('args', []).items():
+            ps = PromptSampler(psdict)
+            self.add(ps, name=name)
 
 class ImageOutHandler():
 
