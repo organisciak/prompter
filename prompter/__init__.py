@@ -6,6 +6,7 @@ import pkg_resources
 import ipywidgets as widgets
 from IPython.display import display
 import os
+import re
 import json
 
 DATA_PATH = Path(pkg_resources.resource_filename(__name__, 'data'))
@@ -135,6 +136,45 @@ class Prompter():
         self.ref[name] = path
         return self[name]
 
+    def template(self, template, fill=[]):
+        '''
+        Construct from a template, where portions to replace are marked with double curly braces.
+
+        Refer to saved PromptSamplers by name in the curly braces - optionally with square brackets to
+        refer to number to sample. If curly braces are empty, what to put in is pulled from the list
+        in the fill arg, in order.
+        
+        e.g.
+            `Prompt.template("{{}} {{serene[1]}}, {{videojunk}}", ["A poster of"])`
+
+            will fill 'A poster of' followed by one term from the 'serene' prompt list and
+            all videojunk terms.
+        '''
+        
+        # make into a formal template
+        template_str = re.sub(r"{{.*?}}", r"{}", template)
+        substrings = re.findall(r"{{(.*?)}}", template)
+
+        fill_ind = 0
+        if type(fill) is str:
+            fill = [fill]
+
+        fargs = []
+        for substr in substrings:
+            substr = substr.strip()
+            if substr == '':
+                fargs.append(fill[fill_ind])
+                fill_ind += 1
+            else:
+                name, count = re.search(r"^(.*?)\[?(\d*)\]?$", substr).groups()
+                if count != '':
+                    count = int(count)
+                    fargs.append(self[name][count])
+                else:
+                    fargs.append(self[name])
+
+        return template_str.format(*fargs)
+
     def parse_interrogations(self, fpath, name=None):
         ''' Parse an output data_desc.csv-style file from CLIP interrogator and return two PromptSampler: one
         for the BLIP settings, and one for the CLIP styles.'''
@@ -154,14 +194,16 @@ class Prompter():
         
         return self.cache[f"{name}_scenes"], self.cache[f"{name}_styles"]
 
-    def add_terms(self, name, terms, weights=None):
-        ''' Initialize a prompt sampler and add to cache.'''
+    def add_terms(self, name, terms, weights=None, instance_cache=False):
+        ''' Initialize a prompt sampler and add to class cache.'''
+        assert instance_cache is None, "Writing to instance cache is currently not supported"
         ps = PromptSampler(terms, weights)
         self.cache[name] = ps
         return self[name]
 
-    def add(self, promptsampler, name=None):
-        ''' Add already initialized PromptSampler '''
+    def add(self, promptsampler, name=None, instance_cache=False):
+        ''' Add already initialized PromptSampler to class cache. '''
+        assert instance_cache is None, "Writing to instance cache is currently not supported"
         if name is None:
             assert promptsampler.name is not None, "Need a name either in PromptSampler instance or supplied by arg"
         self.cache[name] = promptsampler
