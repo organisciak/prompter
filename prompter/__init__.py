@@ -14,7 +14,7 @@ DATA_PATH = Path(pkg_resources.resource_filename(__name__, 'data'))
 rng = default_rng()
 
 class PromptSampler():
-    def __init__(self, terms, weights=None, name=None):
+    def __init__(self, terms, weights=None, name=None, description=None):
         '''
         Terms - the terms to use. If a list, used directly. 
                 If a string, will split on commas andstrip whitespace.
@@ -29,20 +29,23 @@ class PromptSampler():
             self.terms = self.terms.tolist()
         elif isinstance(self.terms, Path) and self.terms.name.endswith('.json'):
             with open(self.terms) as f:
-                self.terms = json.load(terms)
+                self.terms = json.load(f)
 
         self.weights = None
         if self.weights is not None:
             self.weights = np.array(weights)
         self.name = name
+        self.description = description
 
         if type(self.terms) is dict:
-            self.terms, w, n = self._from_dict(self.terms)
+            self.terms, w, n, d = self._from_dict(self.terms)
             # don't overwrite manually provided weights and names
             if self.weights is None:
                 self.weights = w
             if self.name is None:
                 self.name = n
+            if self.description is None:
+                self.name = d
 
     def __len__(self):
         return len(self.terms)
@@ -62,14 +65,15 @@ class PromptSampler():
             return json.dumps(self.to_dict())
         else:
             with open(fname, mode=mode) as f:
-                json.dump(self.to_dict(), fname)
+                json.dump(self.to_dict(), f, indent=True)
 
     def _from_dict(self, indict):
         terms = indict.get('terms', [])
         assert len(terms), "Dict didn't have any terms in it"
         weights = indict.get('weights', None)
         name = indict.get('name', None)
-        return terms, weights, name
+        desc = indict.get('description', None)
+        return terms, weights, name, desc
 
     def _from_json(self, injson):
         if '{' not in injson.strip():
@@ -78,8 +82,8 @@ class PromptSampler():
                 data = json.load(f)
         else:
             data = json.loads(injson)
-        terms, weights, name = self._from_dict(data)
-        return terms, weights, name
+        terms, weights, name, desc = self._from_dict(data)
+        return terms, weights, name, desc
 
 
     def __repr__(self):
@@ -115,9 +119,9 @@ class PromptSampler():
 class Prompter():
     
     cache = {}
-    ref = { 'aweadj': DATA_PATH/'awe_adj.csv',
-            'videojunk': DATA_PATH/'videojunk_tags.csv',
-            'serene': DATA_PATH/'serene_settings.csv'
+    ref = { 'aweadj': DATA_PATH/'awe_adj.json',
+            'videojunk': DATA_PATH/'videojunk_tags.json',
+            'serene': DATA_PATH/'serene_settings.json'
             }
 
     def __init__(self, name=None, description=None, templates=[]):
@@ -128,8 +132,14 @@ class Prompter():
             templates = [{'template':template for template in templates}]
     
         self.templates = templates
-        self.name = None
-        self.description = None
+        self.name = name
+        self.description = description
+
+        # Auto-populate data dir files which aren't explicitly notes, using filename
+        # this really doesn't need to be in an instance _init_ since it's a class variable
+        for fpath in DATA_PATH.glob('*json'):
+            if fpath not in Prompter.ref.values():
+                Prompter.ref[fpath.stem] = fpath
 
     def __getitem__(self, key):
         try:
@@ -247,11 +257,9 @@ class Prompter():
         if name is None:
             name = Path(path).stem
         
-        if str(path) not in self.ref.values():
-            df = pd.read_csv(path)
-            weights = df.weight if 'weight' in df.columns else None
-            ps = PromptSampler(df.prompt.tolist(), weights)
-            
+        if name not in self.cache.keys():
+            path = Path(path)
+            ps = PromptSampler(path)
             self.cache[name] = ps
             self.ref[name] = str(path)
         
@@ -279,12 +287,12 @@ class Prompter():
             return json.dumps(outdict)
         else:
             with open(fname, mode=mode) as f:
-                json.dump(outdict, f)
+                json.dump(outdict, f, indent=True)
 
     def read_json(self, fname):
         with open(fname, mode='r') as f:
             indict = json.load(f)
-        self.from_dict(indict)
+        return self.from_dict(indict)
 
     def from_dict(self, indict):
         if self.name is None:
