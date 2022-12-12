@@ -58,9 +58,11 @@ class PromptSampler():
         return self.__str__()
 
     def to_dict(self):
-        return dict(terms=self.terms, weights=self.weights, name=self.name)
+        return dict(terms=self.terms, weights=self.weights, name=self.name, description=self.description)
 
     def to_json(self, fname=None, mode='w'):
+        ''' todo support jsonlines format: https://jsonlines.readthedocs.io/en/latest/'''
+        assert mode != 'a', 'appending not yet supported'
         if fname is None:
             return json.dumps(self.to_dict())
         else:
@@ -117,29 +119,27 @@ class PromptSampler():
             return PromptSampler(choices.tolist())
 
 class Prompter():
-    
-    cache = {}
-    ref = { 'aweadj': DATA_PATH/'awe_adj.json',
-            'videojunk': DATA_PATH/'videojunk_tags.json',
-            'serene': DATA_PATH/'serene_settings.json'
-            }
 
     def __init__(self, name=None, description=None, templates=[]):
         '''
         templates: optional list of templates, or list of dicts with a 'template' key
         '''
+        if type(templates) is str:
+            templates = [templates]
         if len(templates) and type(templates[0]) is not dict:
             templates = [{'template':template for template in templates}]
     
         self.templates = templates
         self.name = name
         self.description = description
+        self.cache = {}
+        self.ref = {}
 
         # Auto-populate data dir files which aren't explicitly notes, using filename
         # this really doesn't need to be in an instance _init_ since it's a class variable
         for fpath in DATA_PATH.glob('*json'):
-            if fpath not in Prompter.ref.values():
-                Prompter.ref[fpath.stem] = fpath
+            if fpath not in self.ref.values():
+                self.ref[fpath.stem] = fpath
 
     def __getitem__(self, key):
         try:
@@ -269,6 +269,13 @@ class Prompter():
         '''Serialize cache to dictionary. If cache_keys provided, only save certain keys'''
         if cache_keys is None:
             cache_keys = self.cache.keys()
+
+        if name is None:
+            name = self.name
+        
+        if description is None:
+            description = self.description
+
         serial = dict(
             name=name,
             description=description,
@@ -280,9 +287,12 @@ class Prompter():
     def to_json(self, fname=None, name=None, description=None, cache_keys=None, mode='w'):
         if name is None:
             name = self.name
+        
         if description is None:
             description = self.description
+        
         outdict = self.to_dict(name, description, cache_keys)
+        
         if fname is None:
             return json.dumps(outdict)
         else:
@@ -290,6 +300,7 @@ class Prompter():
                 json.dump(outdict, f, indent=True)
 
     def read_json(self, fname):
+        ''' todo support jsonlines'''
         with open(fname, mode='r') as f:
             indict = json.load(f)
         return self.from_dict(indict)
@@ -329,11 +340,14 @@ class ImageOutHandler():
     def reset(self):
         self.save_queue = {}
 
-    def _save_im_btn(self, b):
+    def _save_im_btn(self, b, save_prompt=True):
         fname = b.description[5:-1]
-        im = self.save_queue[fname]
+        im, prompt = self.save_queue[fname]
         print("saving", fname)
         im.save(fname)
+        if save_prompt:
+            with open(self.outdir / "prompts.txt", mode='a') as f:
+                f.write(f"{fname}\t{prompt}\n")
         b.disabled = True
 
     def _delete_im_btn(self, b):
@@ -362,25 +376,30 @@ class ImageOutHandler():
         ask: Buttons for on-demand commands. If save=False, offer a save button. If save=True, offer a delete button.
         '''
         # some models don't return the safety checks.
-        if unsafe_detected is None:
+        if not unsafe_detected:
             unsafe_detected = [False] * len(images)
         
         if type(prompts) == str:
             prompts = [prompts] * len(images)
 
+        save_if_asked = False
         if not save:
             save_prompts = False
+            save_if_asked = True
 
         if not fname_suffix:
             fname_suffix = str(randint(0, 2147483647))
 
-        for i, (image, unsafe, prompt) in enumerate(zip(images, unsafe_detected, prompts)):
+        if type(fname_suffix) is str:
+            fname_suffix = [fname_suffix] * len(images)
+
+        for i, (image, unsafe, prompt, suffix) in enumerate(zip(images, unsafe_detected, prompts, fname_suffix)):
             if unsafe:
                 print('skipping for content filter')
                 continue
         
             clean_prompt = self._clean_prompt(prompt)
-            fname = self.outdir / f"{clean_prompt[:20]}-{fname_suffix}-{i}.png"
+            fname = self.outdir / f"{clean_prompt[:20]}-{suffix}-{i}.png"
 
             if print_ims:
                 display(image)
@@ -394,10 +413,10 @@ class ImageOutHandler():
                     button.on_click(self._delete_im_btn)
                     print('-----')
             elif ask:
-                self.save_queue[str(fname)] = image
+                self.save_queue[str(fname)] = (image, prompt)
                 button = widgets.Button(description=f"Save {fname}?")
                 display(button)
-                button.on_click(self._save_im_btn)
+                button.on_click(lambda x: self._save_im_btn(x, save_prompt=save_if_asked))
                 print('-----')
 
             if save_prompts:
