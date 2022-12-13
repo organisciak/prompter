@@ -2,7 +2,7 @@
 from setuptools import setup, find_packages
 
 setup(name='Prompter',
-      version='0.2.1',
+      version='0.2.2',
       description='Text-to-Speech Prompt Helper',
       author='Peter Organisciak',
       author_email='organisciak@gmail.com',

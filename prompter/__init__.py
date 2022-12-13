@@ -19,7 +19,7 @@ class PromptSampler():
         Terms - the terms to use. If a list, used directly. 
                 If a string, will split on commas andstrip whitespace.
                 If a dict, expects {'terms':[], 'weights':[], 'name':''}, where only terms is required.
-                If a path, assumes json
+                If a path (either Path type or string ends with .json), assumes json
         '''
         self.terms = terms
         if (type(self.terms) is str):
@@ -27,7 +27,7 @@ class PromptSampler():
             self.terms = [x.strip() for x in self.terms.split(',')]
         elif (type(self.terms) is np.ndarray):
             self.terms = self.terms.tolist()
-        elif isinstance(self.terms, Path) and self.terms.name.endswith('.json'):
+        elif isinstance(self.terms, Path) or self.terms.name.endswith('.json'):
             with open(self.terms) as f:
                 self.terms = json.load(f)
 
@@ -92,7 +92,7 @@ class PromptSampler():
         return self.__str__()
 
     def __add__(self, other):
-        if type(other) is list:
+        if (type(other) in [list, str]) or isinstance(other, Path):
             other = PromptSampler(other)
 
         assert type(other) == type(self)
@@ -101,7 +101,13 @@ class PromptSampler():
         else:
             # if only one sampler has weights, then drop weights
             weights = None
-        return PromptSampler(self.terms+other.terms, weights=weights)
+
+        name = self.name
+        if (other.name is not None) and (name is not None):
+            name = f"{name}-{other.name}"
+        elif other.name is not None:
+            name = other.name
+        return PromptSampler(self.terms+other.terms, weights=weights, name=name)
 
     def __getitem__(self, n):
         ''' Shorthand for sample'''
@@ -241,7 +247,9 @@ class Prompter():
         return self[name]
 
     def add(self, promptsampler, name=None):
-        ''' Add already initialized PromptSampler to class cache. '''
+        ''' Add already initialized PromptSampler - or path/string/list args to initialize one - to class cache.'''
+        if (type(promptsampler) in [list, str]) or isinstance(promptsampler, Path):
+            promptsampler = PromptSampler(promptsampler)
         if name is None:
             assert promptsampler.name is not None, "Need a name either in PromptSampler instance or supplied by arg"
             name = promptsampler.name
@@ -259,6 +267,7 @@ class Prompter():
         
         if name not in self.cache.keys():
             path = Path(path)
+            assert path.exists(), f"No '{name}' data"
             ps = PromptSampler(path)
             self.cache[name] = ps
             self.ref[name] = str(path)
