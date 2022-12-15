@@ -27,7 +27,7 @@ class PromptSampler():
             self.terms = [x.strip() for x in self.terms.split(',')]
         elif (type(self.terms) is np.ndarray):
             self.terms = self.terms.tolist()
-        elif isinstance(self.terms, Path) or self.terms.name.endswith('.json'):
+        elif isinstance(self.terms, Path) or (type(self.terms) is str and self.terms.endswith('.json')):
             with open(self.terms) as f:
                 self.terms = json.load(f)
 
@@ -369,7 +369,7 @@ class ImageOutHandler():
         b.disabled = True
 
     def display_ims(self, images, prompts, fname_suffix=None, unsafe_detected=None, save=True, print_ims=True, 
-                    ask=False, save_prompts=True):
+                    ask=False, save_prompts=True, template=None):
         '''
         Handled generated images.
 
@@ -430,4 +430,7 @@ class ImageOutHandler():
 
             if save_prompts:
                 with open(self.outdir / "prompts.txt", mode='a') as f:
-                    f.write(f"{fname}\t{prompt}\n")
+                    line = f"{fname}\t{prompt}"
+                    if template:
+                        line += '\n' + template
+                    f.write(line+"\n")
