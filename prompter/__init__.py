@@ -275,13 +275,15 @@ class Prompter():
         self.cache[name] = ps
         return self[name]
 
-    def add(self, promptsampler, name=None):
+    def add(self, promptsampler, name=None, description=None):
         ''' Add already initialized PromptSampler - or path/string/list args to initialize one - to class cache.'''
         if (type(promptsampler) in [list, str]) or isinstance(promptsampler, Path):
             promptsampler = PromptSampler(promptsampler)
         if name is None:
             assert promptsampler.name is not None, "Need a name either in PromptSampler instance or supplied by arg"
             name = promptsampler.name
+        if description:
+            promptsampler.description = description
         self.cache[name] = promptsampler
         return self[name]
 
