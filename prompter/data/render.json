@@ -1,0 +1,13 @@
+{
+ "terms": [
+  "pixar render",
+  "3d blender render",
+  "low-poly",
+  "3d isometric render",
+  "physically based rendering",
+  "polycount"
+ ],
+ "weights": null,
+ "name": "render",
+ "description": null
+}
