@@ -45,7 +45,7 @@ class PromptSampler():
             if self.name is None:
                 self.name = n
             if self.description is None:
-                self.name = d
+                self.description = d
 
     def __len__(self):
         return len(self.terms)
@@ -126,9 +126,11 @@ class PromptSampler():
 
 class Prompter():
 
-    def __init__(self, name=None, description=None, templates=[]):
+    def __init__(self, name=None, description=None, templates=[], data_dir=None):
         '''
         templates: optional list of templates, or list of dicts with a 'template' key
+
+        data_dir: an additional user-defined directory of data.
         '''
         if type(templates) is str:
             templates = [templates]
@@ -145,6 +147,16 @@ class Prompter():
         # this really doesn't need to be in an instance _init_ since it's a class variable
         for fpath in DATA_PATH.glob('*json'):
             if fpath not in self.ref.values():
+                self.ref[fpath.stem] = fpath
+
+        if data_dir:
+            data_dir = Path(data_dir)
+            try:
+                assert data_dir.exists()
+            except:
+                raise AssertionError("User defined data_dir needs to exist")
+            for fpath in data_dir:
+                # overwrites existing
                 self.ref[fpath.stem] = fpath
 
     def __getitem__(self, key):
@@ -197,6 +209,23 @@ class Prompter():
                 fargs.append(self[name][count])
 
         return template_str.format(*fargs)
+    
+    def load_all(self):
+        ''' Load all datasets. '''
+        for key in self.ref.keys():
+            self[key]
+
+    def summary(self,  load_all=False):
+        rows = []
+        if load_all:
+            self.load_all()
+        for k, ps in self.cache.items():
+            rows.append({"name":ps.name, "description": ps.description, "loaded":True})
+        for k, v in self.ref.items():
+            if k not in self.cache:
+                rows.append({"name":v.name, "description":"", "loaded":False})
+        print(pd.DataFrame(rows).to_markdown(index=False))
+        print("Run with `load_all=True` to see full info")
 
     def _parse_template(self, template):
         # make into a formal template
