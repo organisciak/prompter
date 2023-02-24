@@ -155,7 +155,7 @@ class Prompter():
                 assert data_dir.exists()
             except:
                 raise AssertionError("User defined data_dir needs to exist")
-            for fpath in data_dir:
+            for fpath in data_dir.glob('*json'):
                 # overwrites existing
                 self.ref[fpath.stem] = fpath
 
